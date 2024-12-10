@@ -1,8 +1,4 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-on:
-  pull_request:
-    types: [opened, reopened]
-
 language: 'en-US'
 early_access: false
 reviews:
