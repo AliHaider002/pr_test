@@ -4,6 +4,10 @@ import './App.css';
 import { useState } from 'react';
 
 function App() {
+  // console.log("coderabbit");
+  
+  console.log('App');
+
   return <div></>;
 }
 
