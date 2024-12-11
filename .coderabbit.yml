@@ -2,7 +2,7 @@
 language: 'en-US'
 early_access: false
 reviews:
-  profile: 'chill'
+  profile: 'assertive'
   request_changes_workflow: true
   high_level_summary: false
   poem: false
@@ -11,5 +11,78 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+  tools:
+    eslint:
+      enabled: true
+      rules:
+        # Import ordering
+        import/order:
+          - error
+          - groups:
+              - builtin
+              - external
+              - internal
+              - parent
+              - sibling
+            pathGroups:
+              - pattern: react
+                group: builtin
+                position: before
+              - pattern: next/**
+                group: builtin
+                position: after
+              - pattern: '@/components/**'
+                group: internal
+              - pattern: '@/utils/**'
+                group: internal
+                position: after
+              - pattern: '@/helpers/**'
+                group: internal
+                position: after
+              - pattern: '@/constants/**'
+                group: internal
+                position: after
+              - pattern: '*.css'
+                group: sibling
+                position: after
+            newlines-between: always
+
+        # Error prevention
+        no-unused-vars: error
+        no-undef: error
+        no-console: error
+        no-debugger: error
+        no-alert: error
+
+        # Code style
+        no-trailing-spaces: error
+        no-multiple-empty-lines: [error, { max: 1 }]
+        padding-line-between-statements:
+          - error
+          - blankLine: always
+            prev: '*'
+            next: return
+          - blankLine: always
+            prev: ['const', 'let', 'var']
+            next: '*'
+          - blankLine: any
+            prev: ['const', 'let', 'var']
+            next: ['const', 'let', 'var']
+
+        # React specific
+        react/jsx-pascal-case: error
+        react/jsx-filename-extension: [error, { extensions: ['.tsx', '.jsx'] }]
+        react/prop-types: error
+        react/jsx-key: error
+        react/no-array-index-key: error
+        react/no-unused-prop-types: error
+        react/jsx-no-duplicate-props: error
+        react/jsx-no-undef: error
+        react/no-direct-mutation-state: error
+
+        # DRY and clean code
+        max-lines-per-function: [error, { max: 50 }]
+        complexity: [error, { max: 10 }]
+
 chat:
   auto_reply: true
