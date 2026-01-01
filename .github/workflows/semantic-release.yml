@@ -1,0 +1,174 @@
+name: Frontend Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm i -f
+
+      - name: Run Semantic Release
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Generate PR-based Release Notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get current and previous tags
+          git fetch --tags
+          CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$CURRENT_TAG" ]; then
+            echo "No tags found, skipping release notes generation"
+            exit 0
+          fi
+
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
+          VERSION="${CURRENT_TAG#v}"
+          DATE=$(date +"%B %d, %Y")
+
+          echo "Current tag: $CURRENT_TAG"
+          echo "Previous tag: $PREVIOUS_TAG"
+
+          # Get commits between tags
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMIT_RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
+          else
+            COMMIT_RANGE="${CURRENT_TAG}"
+          fi
+
+          echo "Commit range: $COMMIT_RANGE"
+
+          # Get commit SHAs in the range
+          COMMIT_SHAS=$(git log ${COMMIT_RANGE} --pretty=format:"%H" 2>/dev/null | head -50)
+
+          # Find PRs associated with these commits
+          PR_NUMBERS=""
+          for SHA in $COMMIT_SHAS; do
+            # Use GitHub API to find PR for this commit
+            PR_NUM=$(gh api "/repos/${{ github.repository }}/commits/${SHA}/pulls" --jq '.[0].number' 2>/dev/null || echo "")
+            if [ -n "$PR_NUM" ] && [ "$PR_NUM" != "null" ]; then
+              PR_NUMBERS="$PR_NUMBERS $PR_NUM"
+            fi
+          done
+
+          # Remove duplicates
+          PR_NUMBERS=$(echo "$PR_NUMBERS" | tr ' ' '\n' | sort -u | grep -v '^$')
+
+          echo "Found PRs: $PR_NUMBERS"
+
+          # Initialize release notes
+          cat > RELEASE_NOTES.md << 'HEADER'
+          # 🚀 Release Notes
+          HEADER
+
+          # Add version and date
+          echo "" >> RELEASE_NOTES.md
+          echo "## ${CURRENT_TAG}" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "**Release Date:** ${DATE}" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "---" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+
+          # Process PRs
+          FEATURES=""
+          FIXES=""
+          OTHER=""
+
+          for PR_NUM in $PR_NUMBERS; do
+            echo "Fetching PR #${PR_NUM}..."
+            
+            PR_DATA=$(gh pr view "$PR_NUM" --json title,body 2>/dev/null || echo "")
+            
+            if [ -z "$PR_DATA" ]; then
+              continue
+            fi
+            
+            PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // "No title"')
+            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""' | head -30)
+            
+            # Create entry
+            ENTRY="### PR #${PR_NUM}: ${PR_TITLE}
+
+          ${PR_BODY}
+
+          ---
+
+          "
+            
+            # Categorize based on PR title
+            if echo "$PR_TITLE" | grep -qiE "^feat|feature|add|new"; then
+              FEATURES="${FEATURES}${ENTRY}"
+            elif echo "$PR_TITLE" | grep -qiE "^fix|bug|resolve|hotfix"; then
+              FIXES="${FIXES}${ENTRY}"
+            else
+              OTHER="${OTHER}${ENTRY}"
+            fi
+          done
+
+          # Write sections
+          if [ -n "$FEATURES" ]; then
+            echo "## ✨ New Features" >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "$FEATURES" >> RELEASE_NOTES.md
+          fi
+
+          if [ -n "$FIXES" ]; then
+            echo "## 🐛 Bug Fixes" >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "$FIXES" >> RELEASE_NOTES.md
+          fi
+
+          if [ -n "$OTHER" ]; then
+            echo "## 📦 Other Changes" >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "$OTHER" >> RELEASE_NOTES.md
+          fi
+
+          # If no PRs found, add a note
+          if [ -z "$FEATURES" ] && [ -z "$FIXES" ] && [ -z "$OTHER" ]; then
+            echo "No PR descriptions available for this release." >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for commit details." >> RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+          fi
+
+          # Footer
+          echo "---" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "---" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "*Auto-generated from PR descriptions.*" >> RELEASE_NOTES.md
+
+          echo "✅ RELEASE_NOTES.md generated:"
+          cat RELEASE_NOTES.md
+
+      - name: Commit and Push Release Notes
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add RELEASE_NOTES.md
+            git diff --staged --quiet || git commit -m "docs: update RELEASE_NOTES.md [skip ci]"
+            git push origin main || echo "Nothing to push"
+          fi
