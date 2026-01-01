@@ -9,12 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -103,7 +103,40 @@ jobs:
             fi
             
             PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // "No title"')
-            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""' | head -30)
+            # Extract PR body with safe truncation: first try to split on horizontal rules,
+            # then fall back to character limit with safe word-boundary truncation
+            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""' | \
+              awk '/^[-]{3,}$|^[*]{3,}$|^[_]{3,}$/ { exit } { print }' | \
+              awk -v maxlen=2000 'BEGIN { accum="" }
+              {
+                line_len = length($0)
+                newline_len = (accum != "" ? 1 : 0)
+                total = length(accum) + newline_len + line_len
+                if (total <= maxlen) {
+                  accum = accum (accum != "" ? "\n" : "") $0
+                } else {
+                  # Need to truncate - find safe break point at word boundary
+                  remaining = maxlen - length(accum) - newline_len
+                  if (remaining > 20) {
+                    # Extract substring and find last whitespace
+                    line = substr($0, 1, remaining)
+                    if (match(line, /.*[[:space:]]/)) {
+                      accum = accum "\n" substr(line, 1, RLENGTH) "..."
+                    } else {
+                      accum = accum "\n" line "..."
+                    }
+                  } else {
+                    # Very little space left, trim accum to last whitespace
+                    if (match(accum, /.*[[:space:]]/)) {
+                      accum = substr(accum, 1, RLENGTH) "..."
+                    } else if (length(accum) > 0) {
+                      accum = accum "..."
+                    }
+                  }
+                  exit
+                }
+              }
+              END { print accum }')
             
             # Create entry
             ENTRY="### PR #${PR_NUM}: ${PR_TITLE}
