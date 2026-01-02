@@ -1,32 +1,79 @@
 # 🚀 Release Notes
 
-**This file is auto-generated from PR descriptions on each release.**
+## v1.0.0
+
+**Release Date:** January 02, 2026
 
 ---
 
-## 📋 How it works
+## ✨ New Features
 
-1. When code is pushed to `main`, semantic-release creates a new version
-2. This workflow fetches all merged PRs since the last release
-3. PR titles and descriptions are compiled into this file
+### PR #7: feat: sementic release is integrated with release notes generation
 
----
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
 
-## ✍️ For Developers
+## Summary by CodeRabbit
 
-To ensure good release notes, write meaningful PR descriptions:
+## Release Notes
 
-```markdown
-## What does this PR do?
-- Added hourly pricing option for meeting rooms
-- Users can select duration in hours
-- Minimum booking is 1 hour
+* **Chores**
+  * Implemented automated release pipeline with semantic versioning
+  * Added standardized pull request template to ensure consistent contribution documentation
+  * Configured automated release notes generation for improved release communication
 
-## Related Task
-Asana: https://app.asana.com/...
-```
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
 
 ---
 
-*Next release will populate this file with actual PR descriptions.*
 
+## 🐛 Bug Fixes
+
+### PR #10: fix: upgraded the workflow node version
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Updated build pipeline Node.js runtime to version 22 for enhanced compatibility and stability.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+---
+
+### PR #11: fix: github permission issue
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Updated the automated release workflow with enhanced permissions and authentication to ensure reliable and secure release publishing.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+---
+
+
+## 📦 Other Changes
+
+### PR #2: Test
+
+
+
+---
+
+
+---
+
+📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)
+
+---
+
+*Auto-generated from PR descriptions.*
