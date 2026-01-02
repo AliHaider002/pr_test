@@ -1,5 +1,33 @@
 # 🚀 Release Notes
 
+## v1.0.3
+
+**Release Date:** January 02, 2026
+
+---
+
+## ✨ New Features
+
+### PR #14: fix: the release notes file will not be overwrite, instead it will keep new release on top
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Enhanced release notes generation workflow to better handle existing notes through backup and merging mechanisms, ensuring proper preservation of release history.
+
+<sub>✏️ Tip: You can customize this high-level summary in your review settings.</sub>
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+---
+
+
+
+---
+
+
 ## v1.0.2
 
 **Release Date:** January 02, 2026
