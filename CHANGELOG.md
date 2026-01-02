@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/AliHaider002/pr_test/compare/v1.0.2...v1.0.3) (2026-01-02)
+
+
+### Bug Fixes
+
+* the release notes file will not be overwrite, instead it will keep new release on top ([69d214f](https://github.com/AliHaider002/pr_test/commit/69d214fc7f6ac5db98aedd15fb9a70fe14a48fe4))
+
 ## [1.0.2](https://github.com/AliHaider002/pr_test/compare/v1.0.1...v1.0.2) (2026-01-02)
 
 
