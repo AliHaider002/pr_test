@@ -8,9 +8,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: write # Push commits and tags
+      issues: write # Create releases
+      pull-requests: write # Comment on PRs
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,16 +19,14 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install deps
-        run: npm i -f
-
+      - name: Install Dependencies
+        run: npm install --force
       - name: Run Semantic Release
-        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
@@ -36,115 +35,117 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get current and previous tags
+          set -e
+
+          # ============================================================================
+          # Helper Functions
+          # ============================================================================
+
+          # Truncate PR body at horizontal rules or character limit with word boundaries
+          truncate_pr_body() {
+            local body="$1"
+            local maxlen=2000
+            
+            echo "$body" | \
+              awk '/^[-]{3,}$|^[*]{3,}$|^[_]{3,}$/ { exit } { print }' | \
+              awk -v max="$maxlen" '
+                BEGIN { text="" }
+                {
+                  if (length(text) + length($0) + 1 <= max) {
+                    text = text (text ? "\n" : "") $0
+                  } else if (length(text) < max - 20) {
+                    remain = max - length(text) - 1
+                    line = substr($0, 1, remain)
+                    match(line, /.*[[:space:]]/)
+                    text = text "\n" (RSTART ? substr(line, 1, RLENGTH) : line) "..."
+                    exit
+                  } else {
+                    match(text, /.*[[:space:]]/)
+                    text = (RSTART ? substr(text, 1, RLENGTH) : text) "..."
+                    exit
+                  }
+                }
+                END { print text }
+              '
+          }
+
+          # Categorize PR by title prefix
+          categorize_pr() {
+            local title="$1"
+            if echo "$title" | grep -qiE "^feat|feature|add|new"; then
+              echo "feature"
+            elif echo "$title" | grep -qiE "^fix|bug|resolve|hotfix"; then
+              echo "fix"
+            else
+              echo "other"
+            fi
+          }
+
+          # Append section to release notes
+          append_section() {
+            local title="$1"
+            local content="$2"
+            [ -n "$content" ] && {
+              echo "" >> RELEASE_NOTES.md
+              echo "## $title" >> RELEASE_NOTES.md
+              echo "" >> RELEASE_NOTES.md
+              echo "$content" >> RELEASE_NOTES.md
+            }
+          }
+
+          # ============================================================================
+          # Main Script
+          # ============================================================================
+
+          # Get tags and metadata
           git fetch --tags
           CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          if [ -z "$CURRENT_TAG" ]; then
+          [ -z "$CURRENT_TAG" ] && {
             echo "No tags found, skipping release notes generation"
             exit 0
-          fi
+          }
 
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
-          VERSION="${CURRENT_TAG#v}"
           DATE=$(date +"%B %d, %Y")
+          COMMIT_RANGE="${PREVIOUS_TAG:+$PREVIOUS_TAG..}${CURRENT_TAG}"
 
-          echo "Current tag: $CURRENT_TAG"
-          echo "Previous tag: $PREVIOUS_TAG"
+          echo "📦 Release: $CURRENT_TAG (from ${PREVIOUS_TAG:-initial})"
 
-          # Get commits between tags
-          if [ -n "$PREVIOUS_TAG" ]; then
-            COMMIT_RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
-          else
-            COMMIT_RANGE="${CURRENT_TAG}"
-          fi
+          # Find PRs from commits
+          COMMIT_SHAS=$(git log ${COMMIT_RANGE} --pretty=format:"%H" | head -50)
+          PR_NUMBERS=$(
+            for sha in $COMMIT_SHAS; do
+              gh api "/repos/${{ github.repository }}/commits/${sha}/pulls" \
+                --jq '.[0].number // empty' 2>/dev/null
+            done | sort -u
+          )
 
-          echo "Commit range: $COMMIT_RANGE"
-
-          # Get commit SHAs in the range
-          COMMIT_SHAS=$(git log ${COMMIT_RANGE} --pretty=format:"%H" 2>/dev/null | head -50)
-
-          # Find PRs associated with these commits
-          PR_NUMBERS=""
-          for SHA in $COMMIT_SHAS; do
-            # Use GitHub API to find PR for this commit
-            PR_NUM=$(gh api "/repos/${{ github.repository }}/commits/${SHA}/pulls" --jq '.[0].number' 2>/dev/null || echo "")
-            if [ -n "$PR_NUM" ] && [ "$PR_NUM" != "null" ]; then
-              PR_NUMBERS="$PR_NUMBERS $PR_NUM"
-            fi
-          done
-
-          # Remove duplicates
-          PR_NUMBERS=$(echo "$PR_NUMBERS" | tr ' ' '\n' | sort -u | grep -v '^$')
-
-          echo "Found PRs: $PR_NUMBERS"
+          echo "🔍 Found PRs: ${PR_NUMBERS:-none}"
 
           # Initialize release notes
-          cat > RELEASE_NOTES.md << 'HEADER'
+          cat > RELEASE_NOTES.md << EOF
           # 🚀 Release Notes
-          HEADER
 
-          # Add version and date
-          echo "" >> RELEASE_NOTES.md
-          echo "## ${CURRENT_TAG}" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "**Release Date:** ${DATE}" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
+          ## ${CURRENT_TAG}
 
-          # Process PRs
-          FEATURES=""
-          FIXES=""
-          OTHER=""
+          **Release Date:** ${DATE}
 
-          for PR_NUM in $PR_NUMBERS; do
-            echo "Fetching PR #${PR_NUM}..."
+          ---
+          EOF
+
+          # Process PRs by category
+          FEATURES="" FIXES="" OTHER=""
+
+          for pr in $PR_NUMBERS; do
+            echo "  Processing PR #$pr..."
             
-            PR_DATA=$(gh pr view "$PR_NUM" --json title,body 2>/dev/null || echo "")
-            
-            if [ -z "$PR_DATA" ]; then
-              continue
-            fi
-            
+            PR_DATA=$(gh pr view "$pr" --json title,body 2>/dev/null || continue)
             PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // "No title"')
-            # Extract PR body with safe truncation: first try to split on horizontal rules,
-            # then fall back to character limit with safe word-boundary truncation
-            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""' | \
-              awk '/^[-]{3,}$|^[*]{3,}$|^[_]{3,}$/ { exit } { print }' | \
-              awk -v maxlen=2000 'BEGIN { accum="" }
-              {
-                line_len = length($0)
-                newline_len = (accum != "" ? 1 : 0)
-                total = length(accum) + newline_len + line_len
-                if (total <= maxlen) {
-                  accum = accum (accum != "" ? "\n" : "") $0
-                } else {
-                  # Need to truncate - find safe break point at word boundary
-                  remaining = maxlen - length(accum) - newline_len
-                  if (remaining > 20) {
-                    # Extract substring and find last whitespace
-                    line = substr($0, 1, remaining)
-                    if (match(line, /.*[[:space:]]/)) {
-                      accum = accum "\n" substr(line, 1, RLENGTH) "..."
-                    } else {
-                      accum = accum "\n" line "..."
-                    }
-                  } else {
-                    # Very little space left, trim accum to last whitespace
-                    if (match(accum, /.*[[:space:]]/)) {
-                      accum = substr(accum, 1, RLENGTH) "..."
-                    } else if (length(accum) > 0) {
-                      accum = accum "..."
-                    }
-                  }
-                  exit
-                }
-              }
-              END { print accum }')
+            PR_BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+            PR_BODY=$(truncate_pr_body "$PR_BODY")
             
-            # Create entry
-            ENTRY="### PR #${PR_NUM}: ${PR_TITLE}
+            ENTRY="### PR #${pr}: ${PR_TITLE}
 
           ${PR_BODY}
 
@@ -152,61 +153,50 @@ jobs:
 
           "
             
-            # Categorize based on PR title
-            if echo "$PR_TITLE" | grep -qiE "^feat|feature|add|new"; then
-              FEATURES="${FEATURES}${ENTRY}"
-            elif echo "$PR_TITLE" | grep -qiE "^fix|bug|resolve|hotfix"; then
-              FIXES="${FIXES}${ENTRY}"
-            else
-              OTHER="${OTHER}${ENTRY}"
-            fi
+            case $(categorize_pr "$PR_TITLE") in
+              feature) FEATURES="${FEATURES}${ENTRY}" ;;
+              fix) FIXES="${FIXES}${ENTRY}" ;;
+              *) OTHER="${OTHER}${ENTRY}" ;;
+            esac
           done
 
-          # Write sections
-          if [ -n "$FEATURES" ]; then
-            echo "## ✨ New Features" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$FEATURES" >> RELEASE_NOTES.md
-          fi
+          # Write categorized sections
+          append_section "✨ New Features" "$FEATURES"
+          append_section "🐛 Bug Fixes" "$FIXES"
+          append_section "📦 Other Changes" "$OTHER"
 
-          if [ -n "$FIXES" ]; then
-            echo "## 🐛 Bug Fixes" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$FIXES" >> RELEASE_NOTES.md
-          fi
+          # Fallback message if no PRs
+          [ -z "$FEATURES$FIXES$OTHER" ] && cat >> RELEASE_NOTES.md << EOF
 
-          if [ -n "$OTHER" ]; then
-            echo "## 📦 Other Changes" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$OTHER" >> RELEASE_NOTES.md
-          fi
+          No PR descriptions available for this release.
 
-          # If no PRs found, add a note
-          if [ -z "$FEATURES" ] && [ -z "$FIXES" ] && [ -z "$OTHER" ]; then
-            echo "No PR descriptions available for this release." >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "See [CHANGELOG.md](./CHANGELOG.md) for commit details." >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-          fi
+          See [CHANGELOG.md](./CHANGELOG.md) for commit details.
+          EOF
 
-          # Footer
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "*Auto-generated from PR descriptions.*" >> RELEASE_NOTES.md
+          # Add footer
+          cat >> RELEASE_NOTES.md << EOF
 
-          echo "✅ RELEASE_NOTES.md generated:"
+          ---
+
+          📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)
+
+          ---
+
+          *Auto-generated from PR descriptions.*
+          EOF
+
+          echo "✅ RELEASE_NOTES.md generated"
           cat RELEASE_NOTES.md
 
       - name: Commit and Push Release Notes
         run: |
-          if [ -f RELEASE_NOTES.md ]; then
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            git add RELEASE_NOTES.md
-            git diff --staged --quiet || git commit -m "docs: update RELEASE_NOTES.md [skip ci]"
-            git push origin main || echo "Nothing to push"
-          fi
+          [ ! -f RELEASE_NOTES.md ] && exit 0
+
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add RELEASE_NOTES.md
+
+          git diff --staged --quiet || {
+            git commit -m "docs: update RELEASE_NOTES.md [skip ci]"
+            git push origin main
+          }
