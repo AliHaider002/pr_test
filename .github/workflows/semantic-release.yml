@@ -79,19 +79,24 @@ jobs:
 
           echo "Found PRs: $PR_NUMBERS"
 
-          # Initialize release notes
-          cat > RELEASE_NOTES.md << 'HEADER'
+          # Backup existing release notes if they exist
+          if [ -f RELEASE_NOTES.md ]; then
+            cp RELEASE_NOTES.md RELEASE_NOTES_BACKUP.md
+          fi
+
+          # Initialize NEW release section in a temporary file
+          cat > NEW_RELEASE.md << 'HEADER'
           # 🚀 Release Notes
           HEADER
 
           # Add version and date
-          echo "" >> RELEASE_NOTES.md
-          echo "## ${CURRENT_TAG}" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "**Release Date:** ${DATE}" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
+          echo "" >> NEW_RELEASE.md
+          echo "## ${CURRENT_TAG}" >> NEW_RELEASE.md
+          echo "" >> NEW_RELEASE.md
+          echo "**Release Date:** ${DATE}" >> NEW_RELEASE.md
+          echo "" >> NEW_RELEASE.md
+          echo "---" >> NEW_RELEASE.md
+          echo "" >> NEW_RELEASE.md
 
           # Process PRs
           FEATURES=""
@@ -162,41 +167,54 @@ jobs:
             fi
           done
 
-          # Write sections
+          # Write sections to NEW_RELEASE.md
           if [ -n "$FEATURES" ]; then
-            echo "## ✨ New Features" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$FEATURES" >> RELEASE_NOTES.md
+            echo "## ✨ New Features" >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "$FEATURES" >> NEW_RELEASE.md
           fi
 
           if [ -n "$FIXES" ]; then
-            echo "## 🐛 Bug Fixes" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$FIXES" >> RELEASE_NOTES.md
+            echo "## 🐛 Bug Fixes" >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "$FIXES" >> NEW_RELEASE.md
           fi
 
           if [ -n "$OTHER" ]; then
-            echo "## 📦 Other Changes" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$OTHER" >> RELEASE_NOTES.md
+            echo "## 📦 Other Changes" >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "$OTHER" >> NEW_RELEASE.md
           fi
 
           # If no PRs found, add a note
           if [ -z "$FEATURES" ] && [ -z "$FIXES" ] && [ -z "$OTHER" ]; then
-            echo "No PR descriptions available for this release." >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "See [CHANGELOG.md](./CHANGELOG.md) for commit details." >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
+            echo "No PR descriptions available for this release." >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for commit details." >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
           fi
 
-          # Footer
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "---" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "*Auto-generated from PR descriptions.*" >> RELEASE_NOTES.md
+          # Add separator before old releases
+          echo "" >> NEW_RELEASE.md
+          echo "---" >> NEW_RELEASE.md
+          echo "" >> NEW_RELEASE.md
+
+          # Merge with existing release notes (if they exist)
+          if [ -f RELEASE_NOTES_BACKUP.md ]; then
+            # Skip the header from old file and append the rest
+            tail -n +2 RELEASE_NOTES_BACKUP.md >> NEW_RELEASE.md
+            rm RELEASE_NOTES_BACKUP.md
+          else
+            # First release, add footer
+            echo "📋 For detailed commit history, see [CHANGELOG.md](./CHANGELOG.md)" >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "---" >> NEW_RELEASE.md
+            echo "" >> NEW_RELEASE.md
+            echo "*Auto-generated from PR descriptions.*" >> NEW_RELEASE.md
+          fi
+
+          # Replace the old file with the new merged version
+          mv NEW_RELEASE.md RELEASE_NOTES.md
 
           echo "✅ RELEASE_NOTES.md generated:"
           cat RELEASE_NOTES.md
