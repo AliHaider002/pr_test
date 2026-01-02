@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/AliHaider002/pr_test/compare/v1.0.0...v1.0.1) (2026-01-02)
+
+
+### Bug Fixes
+
+* refactored semantic-release workflow ([1c15a7b](https://github.com/AliHaider002/pr_test/commit/1c15a7b35bdf155c8c8f8209e171cec12c9905a7))
+
 # 1.0.0 (2026-01-02)
 
 
